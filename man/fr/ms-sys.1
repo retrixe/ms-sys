@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH MS-SYS 1 "February 09, 2016"
+.TH MS-SYS 1 "April 17, 2020"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -28,8 +28,14 @@ La liste des options est donn\['e]e ci-dessous :
 .B \-1, \-\-fat12
 \['E]crit un secteur de d\['e]marrage pour FAT12 de type disquette.
 .TP
-.B \-2, \-\-fat32nt
-\['E]crit un secteur de d\['e]marrage pour partition FAT32 de type NT.
+.B \-2, \-\-fat32nt5
+\['E]crit un secteur de d\['e]marrage pour partition FAT32 de type NT5.0 (NTLDR).
+.TP
+.B \-8, \-\-fat32nt6
+\['E]crit un secteur de d\['e]marrage pour partition FAT32 de type NT6.0 (BOOTMGR).
+.TP
+.B \-x, \-\-exfatnt
+\['E]crit un secteur de d\['e]marrage pour partition EXFAT de type NT6.0 (BOOTMGR).
 .TP
 .B \-e, \-\-fat32pe
 \['E]crit un secteur de d\['e]marrage pour partition FAT32 de type PE, pour installation USB.
@@ -154,6 +160,21 @@ Affiche la version du programme.
 .P
 Si ms-sys est d\['e]marr\['e] sans param\[`e]tres, un diagnostic sera effectu\['e] sur le
 p\['e]riph\['e]rique s\['e]lectionn\['e].
+.br
+.SH REMARQUES
+.P
+Lors de l'\['e]criture des informations de partition EXFAT la valeur des t\[^e]tes est pas utilis\['e]e
+et la fonctionnalit\['e] wipelabel est pas non plus pris en charge car ceux-ci ne sont pas stock\['e]s
+dans le Bloc de param\[`e]tres du BIOS ou \['n]importe o\[`u] dans le secteur de d\['e]marrage. Leurs
+param\[`e]tres associ\['e]s seront ignor\['e]s \['s]ils sont sp\['e]cifi\['e]s.
+.sp
+Lors de l'\['e]criture des informations de partition NTFS l'ID du lecteur physique est pas utilis\['e]
+et le wipelabel la fonctionnalit\['e] est pas prise en charge pour les raisons indiqu\['e]es ci-dessus.
+Les param\[`e]tres seront ignor\['e]s.
+.sp
+La fonction d'\['e]criture de l'\ID OEM est prise en charge que sur les syst\[`e]mes de fichiers
+FAT12/16/32 et cette valeur ne doit pas \[^e]tre modifi\['e]e sur les volumes NTFS ou EXFAT, ce qui
+entra\[^i]nera une partition non montable.
 .br
 .SH EXEMPLES
 .P

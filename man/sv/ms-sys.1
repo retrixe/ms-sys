@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH MS-SYS 1 "December 26, 2005"
+.TH MS-SYS 1 "April 17, 2020"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -28,8 +28,14 @@ En sammanfattning av alla val listas nedan:
 .B \-1, \-\-fat12
 Skriv en FAT12 diskett boot sektor till enheten.
 .TP
-.B \-2, \-\-fat32nt
-Skriv en FAT32 partition NT boot sektor till enheten.
+.B \-2, \-\-fat32nt5
+Skriv en FAT32 partition NT5.0 (NTLDR) boot sektor till enheten.
+.TP
+.B \-8, \-\-fat32nt6
+Skriv en FAT32 partition NT6.0 (BOOTMGR) boot sektor till enheten.
+.TP
+.B \-x, \-\-exfatnt6
+Skriv en EXFAT partition NT6.0 (BOOTMGR) boot sektor till enheten.
 .TP
 .B \-e, \-\-fat32pe
 Skriv en FAT32 partition PE boot sektor till enheten, f\[:o]r USB installation och
@@ -152,6 +158,18 @@ Visar programmets version.
 Skriv automatiskt vald boot sektor till enheten.
 .P
 Om ms-sys startas utan val g\[:o]rs en enkel diagnos av vald enhet.
+.br
+.SH "KOMMENTARER"
+.P
+N\[:a]r du skriver EXFAT-partitionsinformation anv\[:a]nds inte h\[oa]rddiskhuvudets v\[:a]rde
+och wipelabel-funktionen st\[:o]ds inte eftersom dessa inte lagras i BIOS Parameter Block eller
+inom boot sektor. Deras tillh\[:o]rande val ignoreras om de anges.
+.sp
+N\[:a]r du skriver NTFS-partitionsinformation den fysiska enhetens id anv\[:a]nds inte och wipelabel-funktionen
+st\[:o]ds inte av de sk\[:a]l som anges ovan. Valen kommer att ignoreras.
+.sp
+Funktionen Skriv OEM ID st\[:o]ds endast p\[oa] FAT12/16/32-filsystem och b\[:o]r inte anv\[:a]ndas
+med NTFS- eller EXFAT-volymer, vilket kommer att resultera i en omonterbar partition.
 .br
 .SH "EXEMPEL"
 .P

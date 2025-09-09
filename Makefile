@@ -21,7 +21,7 @@ PACKAGE = ms-sys
 # Example: EXTRA_CFLAGS = -D MY_DEFINE=1
 
 # The row below is a workaround for systems which lack libintl.h
-EXTRA_CFLAGS = -idirafter include-fallback -D_FILE_OFFSET_BITS=64 
+EXTRA_CFLAGS = -idirafter include-fallback -D_FILE_OFFSET_BITS=64
 
 # Add anything extra you might need when linking below
 # Example: EXTRA_LDFLAGS = -lm
@@ -40,18 +40,18 @@ SRC = src
 # Where your .h-files live
 INC = inc
 # Where .d-files will be created for dependencies
-DEP = dep
+DEP = build/dep
 # Where any .po-files live for native language support, eg sv_SE.po or de_DE.po
 # A skeleton .po-file could be created by "make messages"
 PO  = po
 # Where your man-pages live
 MAN = man
 # Where .mo-files will be created
-MO  = mo
+MO  = build/mo
 # Where .o-files will be created
-OBJ = obj
+OBJ = build/obj
 # Where your program will be created before installation
-BIN = bin
+BIN = build/bin
 
 # There is no need to change anything below this line
 #***********************************************************************
@@ -63,10 +63,12 @@ INCDIRS = $(INC)
 
 CC ?= gcc
 INCLUDES = $(INCDIRS:%=-I %)
-CFLAGS ?= -O2
+
 ifeq ($(MAKECMDGOALS),debug)
-CFLAGS ?= -g
+CFLAGS ?= -O0 -g
 endif
+
+CFLAGS ?= -O2
 CFLAGS += -ansi -pedantic -Wall -c $(INCLUDES) \
          -D PACKAGE=\"$(PACKAGE)\" -D LOCALEDIR=\"$(LOCALEDIR)\" \
           $(EXTRA_CFLAGS)
@@ -85,7 +87,9 @@ MO_FILES = $(PO_FILES:$(PO)/%.po=$(MO)/%.mo)
 LANGUAGES ?= $(PO_FILES:$(PO)/%.po=%)
 NLS_FILES = $(LANGUAGES:%=$(DESTDIR)$(LOCALEDIR)/%/$(MESSDIR)/$(PACKAGE).mo)
 MAN_FILES = $(foreach FILE, $(MAN_SRC), \
-              $(DESTDIR)$(subst $(MAN),$(MANDIR),$(dir $(FILE)))man$(subst .,,$(suffix $(FILE)))/$(notdir $(FILE)))
+            $(DESTDIR)$(subst $(MAN),$(MANDIR),$(dir $(FILE)))man$(subst .,,$(suffix $(FILE)))/$(notdir $(FILE)))
+GZIP_FILES = $(foreach FILE, $(MAN_SRC), \
+            $(DESTDIR)$(subst $(MAN),$(MANDIR),$(dir $(FILE)))man$(subst .,,$(suffix $(FILE)))/$(subst .1,.1.gz,$(notdir $(FILE))))
 
 FILES = $(SRC_FILES:$(SRC)/%.c=%)
 
@@ -97,7 +101,7 @@ all debug: $(BIN)/$(PACKAGE) $(MO_FILES)
 install: $(DESTDIR)$(BINDIR)/$(PACKAGE) $(NLS_FILES) $(MAN_FILES)
 
 uninstall:
-	$(RM) $(DESTDIR)$(BINDIR)/$(PACKAGE) $(NLS_FILES) $(MAN_FILES)
+	$(RM) $(DESTDIR)$(BINDIR)/$(PACKAGE) $(NLS_FILES) $(GZIP_FILES)
 
 messages: $(MESSAGES)
 
@@ -113,15 +117,17 @@ clean:
 	$(RM) $(filter-out $(BIN)/CVS,$(wildcard $(BIN)/*))
 
 $(DESTDIR)$(BINDIR)/%: $(BIN)/%
-	install -D -m 755 $^ $@
+	install -d $(@D)
+	install -m 755 $^ $@
 
 $(DESTDIR)$(LOCALEDIR)/%/$(MESSDIR)/$(PACKAGE).mo: $(MO)/%.mo
 	mkdir -p $(DESTDIR)$(LOCALEDIR)/$*/$(MESSDIR)
-	install -D -m 644 $^ $@
+	install -m 644 $^ $@
 
 $(DESTDIR)$(MANDIR)/%: $(MAN)/$(dir $(*D))/$(*F)
-	install -D -m 644 $(MAN)/$(dir $(*D))$(*F) $@
-	gzip -f $@
+	install -d $(@D)
+	install -m 644 $(MAN)/$(dir $(*D))$(*F) $@
+	gzip --no-name -f $@
 
 #$(DESTDIR)$(MANDIR)/%: $(MAN)/$(*F)
 #	echo t: $<

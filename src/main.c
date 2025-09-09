@@ -1,5 +1,5 @@
 /******************************************************************
-    Copyright (C) 2009-2016 Henrik Carlqvist
+    Copyright (C) 2009-2022 Henrik Carlqvist
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "fat12.h"
 #include "fat16.h"
 #include "fat32.h"
+#include "exfat.h"
 #include "ntfs.h"
 #include "oem_id.h"
 #include "br.h"
@@ -30,7 +31,7 @@
 #include "nls.h"
 #include "partition_info.h"
 
-#define VERSION "2.6.0"
+#define VERSION "2.8.0"
 
 void print_help(const char *szCommand);
 void print_version(void);
@@ -81,7 +82,11 @@ int main(int argc, char **argv)
    }
    if(iBr == AUTO_BR)
    {
+#ifdef __OpenBSD__
+      iBr = smart_select(fp, argv[argc-1]);
+#else
       iBr = smart_select(fp);
+#endif
       if(!iBr)
 	 printf(_("Unable to automaticly select boot record for %s\n"),
 		argv[argc-1]);
@@ -114,45 +119,98 @@ int main(int argc, char **argv)
    {
       if( !iBr && !bForce)
       {
-	 if( ! sanity_check(fp, argv[argc-1], FAT32_BR, 1) )
-	 {
-	    fclose(fp);
-	    return 1;
-	 }
+        if (! is_fat_16_fs(fp) && ! is_fat_32_fs(fp) && ! is_exfat_fs(fp) && ! is_ntfs_fs(fp))
+        {
+           printf(_("Failed writing partition information to %s\n"), argv[argc-1]);
+           printf(_("Device must be formatted as FAT16, FAT32, EXFAT or NTFS\n"));
+           fclose(fp);
+           return 1;
+        }
       }
+#ifdef __OpenBSD__
+      if( write_partition_start_sector_number(fp, argv[argc-1]) )
+#else
       if( write_partition_start_sector_number(fp) )
+#endif
       {
-	 printf(_("Start sector %ld (nr of hidden sectors) successfully written to %s\n"),
-		partition_start_sector(fp),
-		argv[argc-1]);
-	 if( write_partition_physical_disk_drive_id_fat32(fp) )
-	 {
-	    printf(_("Physical disk drive id 0x80 (C:) successfully written to %s\n"),
-		   argv[argc-1]);
-	    if( write_partition_number_of_heads(fp, iHeads))
-	    {
-	       printf(_("Number of heads (%d) successfully written to %s\n"),
-		      iHeads != -1 ? iHeads : partition_number_of_heads(fp),
-		      argv[argc-1]);
-	    }
-	    else
-	    {
-	       printf(_("Failed writing number of heads to %s\n"),
-		      argv[argc-1]);
-	    }
-	 }
-	 else
-	 {
-	    printf(_("Failed writing physical disk drive id to %s\n"),
-		   argv[argc-1]);
-	 }
+	    printf(_("Start sector %ld (nr of hidden sectors) successfully written to %s\n"),
+#ifdef __OpenBSD__
+        partition_start_sector(fp, argv[argc-1]),
+#else
+        partition_start_sector(fp),
+#endif
+        argv[argc-1]);
+        if ((is_fat_16_fs(fp)) || (is_fat_32_fs(fp)) || is_ntfs_fs(fp))
+        {
+          if( write_partition_number_of_heads(fp, iHeads))
+          {
+            printf(_("Number of heads (%d) successfully written to %s\n"),
+                iHeads != -1 ? iHeads : partition_number_of_heads(fp),
+                argv[argc-1]);
+          }
+          else
+          {
+            printf(_("Failed writing number of heads to %s\n"),
+                argv[argc-1]);
+          }
+        }
+        if (is_fat_16_fs(fp))
+        {
+          if( write_partition_physical_disk_drive_id_fat16(fp) )
+          {
+            printf(_("Physical disk drive id 0x80 (C:) successfully written to %s\n"),
+                argv[argc-1]);
+          }
+          else
+          {
+            printf(_("Failed writing physical disk drive id to %s\n"),
+                argv[argc-1]);
+          }
+        }
+	    if (is_fat_32_fs(fp))
+        {
+          if( write_partition_physical_disk_drive_id_fat32(fp) )
+          {
+            printf(_("Physical disk drive id 0x80 (C:) successfully written to %s\n"),
+                argv[argc-1]);
+          }
+          else
+          {
+            printf(_("Failed writing physical disk drive id to %s\n"),
+                argv[argc-1]);
+          }
+        }
+        if(is_exfat_fs(fp))
+        {
+          if( write_partition_physical_disk_drive_id_exfat(fp) )
+          {
+            printf(_("Physical disk drive id 0x80 (C:) successfully written to %s\n"),
+                argv[argc-1]);
+          }
+          else
+          {
+            printf(_("Failed writing physical disk drive id to %s\n"),
+                argv[argc-1]);
+          }
+          if (!iBr)
+          {
+            if(write_exfat_br_checksum(fp))
+              printf(_("EXFAT VBR checksum successfully written to %s\n"),
+                  argv[argc-1]);
+            else
+            {
+              printf(_("Failed writing EXFAT VBR checksum to %s\n"),
+                  argv[argc-1]);
+            }
+          }
+        }
       }
       else
       {
-	 printf(_("Failed writing start sector to %s, this is only possible to do with\n"),
-		argv[argc-1]);
-	 printf(_("real partitions!\n"));
-	 iRet = 1;
+	   printf(_("Failed writing start sector to %s, this is only possible to do with\n"),
+		   argv[argc-1]);
+	   printf(_("real partitions!\n"));
+	   iRet = 1;
       }
    }
    switch(iBr)
@@ -386,14 +444,49 @@ int main(int argc, char **argv)
 	 }
       }
       break;
-      case FAT32NT_BR:
+      case FAT32NT5_BR:
       {
-	 if(write_fat_32_nt_br(fp, bKeepLabel))
-	    printf(_("FAT32 NT boot record successfully written to %s\n"),
+	 if(write_fat_32_nt5_br(fp, bKeepLabel))
+	    printf(_("FAT32 NT5.0 boot record successfully written to %s\n"),
 		   argv[argc-1]);
 	 else
 	 {
-	    printf(_("Failed writing FAT32 NT boot record to %s\n"),
+	    printf(_("Failed writing FAT32 NT5.0 boot record to %s\n"),
+		   argv[argc-1]);
+	    iRet = 1;
+	 }
+      }
+      break;
+      case FAT32NT6_BR:
+      {
+	 if(write_fat_32_nt6_br(fp, bKeepLabel))
+	    printf(_("FAT32 NT6.0 boot record successfully written to %s\n"),
+		   argv[argc-1]);
+	 else
+	 {
+	    printf(_("Failed writing FAT32 NT6.0 boot record to %s\n"),
+		   argv[argc-1]);
+	    iRet = 1;
+	 }
+      }
+      break;
+      case EXFATNT6_BR:
+      {
+	 if(write_exfat_nt6_br(fp))
+	    printf(_("EXFAT NT6.0 boot record successfully written to %s\n"),
+		   argv[argc-1]);
+	 else
+	 {
+	    printf(_("Failed writing EXFAT NT6.0 boot record to %s\n"),
+		   argv[argc-1]);
+	    iRet = 1;
+	 }
+     if(write_exfat_br_checksum(fp))
+         printf(_("EXFAT VBR checksum successfully written to %s\n"),
+                argv[argc-1]);
+     else
+	 {
+	    printf(_("Failed writing EXFAT VBR checksum to %s\n"),
 		   argv[argc-1]);
 	    iRet = 1;
 	 }
@@ -518,7 +611,11 @@ void print_help(const char *szCommand)
    printf(
       _("    -1, --fat12     Write a FAT12 floppy boot record to device\n"));
    printf(
-      _("    -2, --fat32nt   Write a FAT32 partition NT boot record to device\n"));
+      _("    -2, --fat32nt5  Write a FAT32 partition NT5.0 boot record to device\n"));
+   printf(
+      _("    -8, --fat32nt6  Write a FAT32 partition NT6.0 boot record to device\n"));
+   printf(
+      _("    -x, --exfatnt6  Write a EXFAT partition NT6.0 boot record to device\n"));
    printf(
       _("    -e, --fat32pe   Write a FAT32 partition PE boot record to device\n"));
    printf(
@@ -597,7 +694,7 @@ void print_version(void)
 {
    printf(_("ms-sys version %s\n"), VERSION);
    printf(_("Written by Henrik Carlqvist\n\n"));
-   printf(_("Copyright (C) 2009-2016 Free Software Foundation, Inc.\n"));
+   printf(_("Copyright (C) 2009-2020 Free Software Foundation, Inc.\n"));
    printf(_("This is free software; see the source for copying conditions.  There is NO\n"));
    printf(_("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"));
 } /* print_version */
@@ -636,8 +733,12 @@ int parse_switches(int argc, char **argv, int *piBr,
    {
       if( ! strcmp("--fat12", argv[argc]))
 	 *piBr = FAT12_BR;
-      else if( ! strcmp("--fat32nt", argv[argc]))
-	 *piBr = FAT32NT_BR;
+      else if( ! strcmp("--fat32nt5", argv[argc]))
+	 *piBr = FAT32NT5_BR;
+      else if( ! strcmp("--fat32nt6", argv[argc]))
+	 *piBr = FAT32NT6_BR;
+      else if( ! strcmp("--exfatnt6", argv[argc]))
+	 *piBr = EXFATNT6_BR;
       else if( ! strcmp("--fat32pe", argv[argc]))
 	 *piBr = FAT32PE_BR;
       else if( ! strcmp("--fat32", argv[argc]))
@@ -705,7 +806,13 @@ int parse_switches(int argc, char **argv, int *piBr,
 		  *piBr = FAT12_BR;
 		  break;
 	       case '2':
-		  *piBr = FAT32NT_BR;
+		  *piBr = FAT32NT5_BR;
+		  break;
+           case '8':
+		  *piBr = FAT32NT6_BR;
+		  break;
+           case 'x':
+		  *piBr = EXFATNT6_BR;
 		  break;
 	       case 'e':
 		  *piBr = FAT32PE_BR;

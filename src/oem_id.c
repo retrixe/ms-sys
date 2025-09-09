@@ -22,7 +22,6 @@
 #include "fat12.h"
 #include "fat16.h"
 #include "fat32.h"
-#include "ntfs.h"
 #include "nls.h"
 
 #include "oem_id.h"
@@ -58,12 +57,11 @@ int ok_to_write_oem_id(FILE *fp, const char *szPath, int bPrintMessages)
 {
    if(sanity_check(fp, szPath, FAT12_BR, 0) ||
       sanity_check(fp, szPath, FAT16_BR, 0) ||
-      sanity_check(fp, szPath, FAT32_BR, 0) ||
-      sanity_check(fp, szPath, NTFS_BR, 0))
+      sanity_check(fp, szPath, FAT32_BR, 0))
       return 1;
    if(bPrintMessages)
    {
-      if(is_fat_12_fs(fp)||is_fat_16_fs(fp)||is_fat_32_fs(fp)||is_ntfs_fs(fp))
+      if(is_fat_12_fs(fp)||is_fat_16_fs(fp)||is_fat_32_fs(fp))
       {
 	 printf(
 	    _("%s does not seem to be a floppy or disk partition device,\n"),
@@ -71,7 +69,7 @@ int ok_to_write_oem_id(FILE *fp, const char *szPath, int bPrintMessages)
       }
       else
       {
-	 printf(_("%s does not seem to have a FAT or NTFS file system,\n"),
+	 printf(_("%s does not seem to have a FAT file system,\n"),
 		szPath);
       }
       printf(_("use the switch -f to force writing of OEM ID\n"));

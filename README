@@ -14,7 +14,36 @@ Microsoft Windows installation.
 Author of this program is Henrik Carlqvist (henca@users.SourceForge.net), it
 is available for download from http://ms-sys.sourceforge.net/
 
-2. Installation
+2. Building from source
+-----------------------
+
+The program can be compiled from source on Linux, FreeBSD, OpenBSD and macOS/OS X
+by following the instructions below:
+
+Install the gettext package for native language support (PO/MO) files and the system
+specific command line development tools including make/gcc/clang etc.
+
+Linux:
+
+See the developer documentation for your distribution.
+
+macOS/OS X:
+
+gettext: use Homebrew or Macports package managers.
+Xcode CLI Development Tools: xcode-select --install
+
+FreeBSD:
+
+Install package manager and update repository: pkg update
+Search for and install GNU Make: pkg install gmake-[version]
+Search for and install gettext: pkg install gettext-tools-[version]
+
+OpenBSD:
+
+Search for and install GNU Make: pkg_add gmake
+Search for and install gettext: pkg_add gettext-tools-[version]
+
+3. Installation
 ---------------
 
 Step 1, unpack the archive:
@@ -31,7 +60,7 @@ Step 3, become root and install
 su (and give password)
 make install
 
-3. Examples
+4. Examples
 -----------
 
 Please note that Windows ME is not useful for making standalone bootable
@@ -100,14 +129,14 @@ cp floppy288.img cd-files/eltorito.img
 mkisofs -b eltorito.img -c eltorito.cat -o cdimage.iso cd-files
 (burn the file cdimage.iso to a CD with cdrecord or another program)
 
-4. Documentation
+5. Documentation
 ----------------
 
 There is a man-page for ms-sys, and you will get some help by typing:
 
 ms-sys --help
 
-5. Known problems
+6. Known problems
 -----------------
 
 There have been reports about unbootable FAT32 partitions created with

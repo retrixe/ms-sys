@@ -16,12 +16,16 @@
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 ******************************************************************/
 #ifdef __linux__
+#define _XOPEN_SOURCE 700 /* X/Open7 POSIX.1-2008 for fileno() */
 #include <linux/hdreg.h>
 #include <linux/fd.h>
 #endif
 /* Ugly fix for compability with both older libc and newer kernels */
 #ifdef __OpenBSD__
+#include <string.h>
+#include <sys/dkio.h>
 #include <sys/types.h>
+#include <sys/disklabel.h>
 #endif
 #include <sys/mount.h>
 #ifdef __linux__
@@ -32,7 +36,7 @@
 /* end of ugly fix */
 #include <sys/ioctl.h>
 
-#if defined(HAVE_SYS_DISK_H)
+#if defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/disk.h>
 #endif
 
@@ -40,17 +44,20 @@
 #include "fat12.h"
 #include "fat16.h"
 #include "fat32.h"
+#include "exfat.h"
 #include "ntfs.h"
 #include "oem_id.h"
 #include "nls.h"
 #include "identify.h"
 
-/* This one should be in stdio.h, however it seems to be missing. Declared here
-   to avoid warnings... */
-#ifndef fileno
-int fileno( FILE *stream);
+#ifdef __APPLE__
+#include <unistd.h>
+#include <sys/uio.h>
+#include <sys/types.h>
+#ifndef DKIOCGETBASE /* get partition byte offset */
+#define DKIOCGETBASE    _IOR('d', 73, uint64_t)
 #endif
-
+#endif
 
 /* Returns TRUE if file is a device, otherwise FALSE */
 static int is_disk_device(FILE *fp);
@@ -59,7 +66,11 @@ static int is_disk_device(FILE *fp);
 static int is_floppy(FILE *fp);
 
 /* Returns TRUE if file is a partition device, otherwise FALSE */
+#ifdef __OpenBSD__
+static int is_partition(FILE *fp, const char *szPath);
+#else
 static int is_partition(FILE *fp);
+#endif
 
 static int is_disk_device(FILE *fp)
 {
@@ -84,7 +95,20 @@ static int is_disk_device(FILE *fp)
    iRes2 = 0;
    lSectors = 0;
 #endif
-
+    
+#ifdef DIOCGDINFO
+    struct disklabel geometry;
+    iRes1 = ioctl(iFd, DIOCGDINFO, &geometry);
+    iRes2 = 0;
+    lSectors = DL_GETDSIZE(&geometry);
+#endif
+    
+#ifdef DKIOCGETBLOCKCOUNT
+    uint32_t writable = 0;
+    iRes1 = ioctl(iFd, DKIOCGETBLOCKCOUNT, &lSectors);
+    iRes2 = ioctl(iFd, DKIOCISWRITABLE, &writable);
+#endif
+    
    return ! (iRes1 && iRes2);
 } /* is_device */
 
@@ -105,9 +129,40 @@ static int is_floppy(FILE *fp)
    else
       return 0;
 #endif
+    
+#ifdef DIOCGDINFO
+    struct disklabel geometry;
+    int iFd = fileno(fp);
+    int iRes1 = ioctl(iFd, DIOCGDINFO, &geometry);
+    uint16_t disk_type = geometry.d_type;
+    
+    if (! iRes1 )
+        return (disk_type == DTYPE_FLOPPY);
+    else
+        return 0;
+#endif
+    
+#ifdef DKIOCISFORMATTED
+    int iFd = fileno(fp);
+    uint32_t formatted = 0;
+    uint8_t mdcbyte = 0; /* media descriptor byte */
+    
+    int iRes1 = ioctl(iFd, DKIOCISFORMATTED, &formatted);
+    int iRes2 = pread(iFd, &mdcbyte, 1, 21);
+    
+    /* Return for 1.44MB/2.88MB formatted floppy media */
+    if (! (iRes1) && (iRes2 = 1))
+        return (mdcbyte == 0xF0) && (formatted == 1);
+    else
+        return 0;
+#endif
 } /* is_floppy */
 
+#ifdef __OpenBSD__
+static int is_partition(FILE *fp, const char *szPath)
+#else
 static int is_partition(FILE *fp)
+#endif
 {
    int iRes1;
    int iRes2;
@@ -128,16 +183,48 @@ static int is_partition(FILE *fp)
 
 #ifdef DIOCGMEDIASIZE
    off_t bytes;
-   unsigned int start_sector;
+   off_t partition_offset = 0;
    iRes1 = ioctl(iFd, DIOCGMEDIASIZE, &bytes);
-   iRes2 = ioctl(iFd, DIOCGFWSECTORS, &start_sector);
+   iRes2 = ioctl(iFd, DIOCGSTRIPEOFFSET, &partition_offset);
    lSectors = 0;
 
-   return (! (iRes1 && iRes2));
+   return (! (iRes1 && iRes2)) && (partition_offset);
+#endif
+    
+#ifdef DIOCGDINFO
+    struct disklabel geometry;
+    uint64_t start_sector = 0;
+    const char *s = &szPath[strlen(szPath) - 1];
+    int part;
+    
+    if (*s == 'c')
+        part = 0;
+    else
+        part = *s - 'a';
+    
+    lSectors = 0;
+    iRes1 = ioctl(iFd, DIOCGDINFO, &geometry);
+    iRes2 = 0;
+    start_sector = DL_GETPOFFSET(&geometry.d_partitions[part]);
+    
+    return ( ! (iRes1 && iRes2)) && (start_sector);
+#endif
+    
+#ifdef DKIOCGETBLOCKCOUNT
+    uint64_t partition_offset = 0; /* in bytes */
+    
+    iRes1 = ioctl(iFd, DKIOCGETBLOCKCOUNT, &lSectors);
+    iRes2 = ioctl(iFd, DKIOCGETBASE, &partition_offset);
+    
+    return (! (iRes1 && iRes2)) && (partition_offset);
 #endif
 } /* is_partition */
 
+#ifdef __OpenBSD__
+unsigned long partition_start_sector(FILE *fp, const char *szPath)
+#else
 unsigned long partition_start_sector(FILE *fp)
+#endif
 {
    int iRes1;
    int iRes2;
@@ -159,15 +246,69 @@ unsigned long partition_start_sector(FILE *fp)
 #endif
 
 #ifdef DIOCGFWSECTORS
-   uint start_sector = 0;
-   iRes1 = ioctl(iFd, DIOCGFWSECTORS, &start_sector);
-   iRes2 = 0;
-   lSectors = 0;
-   
-   if( ! iRes1 )
-      return start_sector;
-   else
-      return 0L;
+    uint blksize = 0;           /* sector size */
+    uint64_t start_sector = 0;
+    off_t partition_offset = 0; /* in bytes */
+    
+    lSectors = 0;
+    iRes1 = ioctl(iFd, DIOCGSECTORSIZE, &blksize);
+    iRes2 = ioctl(iFd, DIOCGSTRIPEOFFSET, &partition_offset);
+    
+    if((is_fat_16_fs(fp)) || (is_fat_32_fs(fp)) || is_ntfs_fs(fp)) {
+        start_sector = (uint32_t)(partition_offset / blksize);
+    }
+    if(is_exfat_fs(fp)) {
+        start_sector = (uint64_t)(partition_offset / blksize);
+    }
+    if (!(iRes1 && iRes2)) {
+        return start_sector;
+    } else {
+        return 0L;
+    }
+#endif
+    
+#ifdef DIOCGDINFO
+    struct disklabel geometry;
+    uint64_t start_sector = 0;
+    const char *s = &szPath[strlen(szPath) - 1];
+    int part;
+    
+    if (*s == 'c')
+        part = 0;
+    else
+        part = *s - 'a';
+    
+    lSectors = 0;
+    iRes1 = ioctl(iFd, DIOCGDINFO, &geometry);
+    iRes2 = 0;
+    start_sector = DL_GETPOFFSET(&geometry.d_partitions[part]);
+    
+    if (! iRes1 )
+        return start_sector;
+    else
+        return 0L;
+#endif
+    
+#ifdef DKIOCGETBLOCKSIZE
+    uint32_t blksize = 0;         /* sector size */
+    uint64_t start_sector = 0;
+    uint64_t partition_offset = 0; /* in bytes */
+    
+    lSectors = 0;
+    iRes1 = ioctl(iFd, DKIOCGETBLOCKSIZE, &blksize);
+    iRes2 = ioctl(iFd, DKIOCGETBASE, &partition_offset);
+    
+    if((is_fat_16_fs(fp)) || (is_fat_32_fs(fp)) || is_ntfs_fs(fp)) {
+        start_sector = (uint32_t)(partition_offset / blksize);
+    }
+    if(is_exfat_fs(fp)) {
+        start_sector = (uint64_t)(partition_offset / blksize);
+    }
+    if (!(iRes1 && iRes2)) {
+        return start_sector;
+    } else {
+        return 0L;
+    }
 #endif
 } /* partition_start_sector */
 
@@ -203,13 +344,65 @@ unsigned short partition_number_of_heads(FILE *fp)
    else
       return 0;
 #endif
+    
+#ifdef DIOCGDINFO
+    struct disklabel geometry;
+    
+    iRes1 = ioctl(iFd, DIOCGDINFO, &geometry);
+    iRes2 = 0;
+    lSectors = 0;
+    
+    if (! iRes1 )
+        return (unsigned short) geometry.d_ntracks;
+    else
+        return 0;
+#endif
+    
+#ifdef DKIOCGETBLOCKCOUNT
+    int heads = 0;
+    int cylinders = 0;
+    uint64_t boundry = 0xFB0400;
+    
+    /* Not used in EXFAT */
+    if(is_exfat_fs(fp))
+        return 0;
+    
+    lSectors = 0;
+    iRes1 = ioctl(iFd, DKIOCGETBLOCKCOUNT, &lSectors);
+    iRes2 = 0;
+
+    /* Determine number of heads if below 8GB CHS address limit */
+    if (lSectors <= boundry) {
+        heads = 4;
+        cylinders = (int)(lSectors / heads / 63);
+        
+        while (cylinders > 1024) {
+            heads *= 2;
+            cylinders /= 2;
+        }
+    }
+    /* Set heads to 255 if above the 8GB CHS address
+     limit or if number of heads reached 256 above */
+    if ((lSectors > boundry) || (heads >= 256)) {
+        heads = 255;
+    }
+    if (!iRes1) {
+        return (unsigned short)heads;
+    } else {
+        return 0;
+    }
+#endif
 } /* partition_number_of_heads */
 
 int sanity_check(FILE *fp, const char *szPath, int iBr, int bPrintMessages)
 {
    int bIsDiskDevice = is_disk_device(fp);
    int bIsFloppy = is_floppy(fp);
+#ifdef __OpenBSD__
+   int bIsPartition = is_partition(fp, szPath);
+#else
    int bIsPartition = is_partition(fp);
+#endif
    switch(iBr)
    {
       case MBR_WIN7:
@@ -313,7 +506,8 @@ int sanity_check(FILE *fp, const char *szPath, int iBr, int bPrintMessages)
       }
       break;
       case FAT32_BR:
-      case FAT32NT_BR:
+      case FAT32NT5_BR:
+      case FAT32NT6_BR:
       case FAT32PE_BR:
       case FAT32FD_BR:
       case FAT32ROS_BR:
@@ -369,6 +563,32 @@ int sanity_check(FILE *fp, const char *szPath, int iBr, int bPrintMessages)
 	 }
       }
       break;
+      case EXFATNT6_BR:
+      {
+	 if( ! bIsPartition )
+	 {
+	    if(bPrintMessages)
+	    {
+	       printf(_("%s does not seem to be a disk partition device,\n"),
+		      szPath);
+	       printf(
+		  _("use the switch -f to force writing of a EXFAT boot record\n"));
+	    }
+	    return 0;
+	 }
+	 if( ! is_exfat_fs(fp))
+	 {
+	    if(bPrintMessages)
+	    {
+	       printf(_("%s does not seem to have a EXFAT file system,\n"),
+		      szPath);
+	       printf(
+		  _("use the switch -f to force writing of a EXFAT boot record\n"));
+	    }
+	    return 0;
+	 }
+      }
+      break;
       default:
       {
 	 if(bPrintMessages)
@@ -394,6 +614,8 @@ void diagnose(FILE *fp, const char *szPath)
       printf(_("%s has a FAT32 file system.\n"), szPath);
    if(is_ntfs_fs(fp))
       printf(_("%s has a NTFS file system.\n"), szPath);
+   if(is_exfat_fs(fp))
+      printf(_("%s has a EXFAT file system.\n"), szPath);
    if(is_br(fp))
       printf(_("%s has an x86 boot sector,\n"), szPath);
    else
@@ -407,6 +629,13 @@ void diagnose(FILE *fp, const char *szPath)
 	 _("it is exactly the kind of NTFS boot record this program\n"));
       printf(
 	 _("would create with the switch -n on a NTFS partition.\n"));
+   }
+   else if(entire_exfat_nt6_br_matches(fp))
+   {
+       printf(
+      _("it is exactly the kind of EXFAT NT6.0 boot record this program\n"));
+       printf(
+      _("would create with the switch -x on a EXFAT partition.\n"));
    }
    else if(entire_fat_12_br_matches(fp))
    {
@@ -445,12 +674,19 @@ void diagnose(FILE *fp, const char *szPath)
 	 printf(
 	    _("would create with the switch -3 on a FAT32 partition.\n"));
       }
-      else if(entire_fat_32_nt_br_matches(fp))
+      else if(entire_fat_32_nt5_br_matches(fp))
       {
 	 printf(
-	   _("it is exactly the kind of FAT32 NT boot record this program\n"));
+	   _("it is exactly the kind of FAT32 NT5.0 boot record this program\n"));
 	 printf(
 	    _("would create with the switch -2 on a FAT32 partition.\n"));
+      }
+      else if(entire_fat_32_nt6_br_matches(fp))
+      {
+	 printf(
+	   _("it is exactly the kind of FAT32 NT6.0 boot record this program\n"));
+	 printf(
+	    _("would create with the switch -8 on a FAT32 partition.\n"));
       }
       else if(entire_fat_32_pe_br_matches(fp))
       {
@@ -486,8 +722,14 @@ void diagnose(FILE *fp, const char *szPath)
 	    _("it seems to be a FAT16 or FAT32 boot record, but it\n"));
 	 printf(
 	    _("differs from what this program would create with the\n"));
-	 printf(_("switch -6, -2, -e or -3 on a FAT16 or FAT32 partition.\n"));
+	 printf(_("switch -6, -2, -8, -e or -3 on a FAT16 or FAT32 partition.\n"));
       }
+   }
+   else if(is_exfat_br(fp) && !entire_exfat_nt6_br_matches(fp))
+   {
+       printf(_("it seems to be a EXFAT boot record, but it differs from\n"));
+       printf(_("what this program would create with the switch -x on a\n"));
+       printf(_("EXFAT partition.\n"));
    }
    else if(is_lilo_br(fp))
    {
@@ -656,12 +898,20 @@ void diagnose(FILE *fp, const char *szPath)
       printf(_("The OEM ID is %s\n"), pc);
 } /* diagnose */
 
+#ifdef __OpenBSD__
+int smart_select(FILE *fp, const char *szPath)
+#else
 int smart_select(FILE *fp)
+#endif
 {
    int i;
 
    for(i=AUTO_BR+1; i<NUMBER_OF_RECORD_TYPES; i++)
+#ifdef __OpenBSD__
+      if(sanity_check(fp, szPath, i, 0))
+#else
       if(sanity_check(fp, "", i, 0))
+#endif
 	 return i;
    return NO_WRITING;
 } /* smart_select */

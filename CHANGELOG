@@ -1,5 +1,29 @@
 Date       Version  Comment
 ---------------------------------------------------------------------------
+ 8/10 2022 2.8.0    No changes, only marked as stable version.
+
+28/6  2020 2.7.0    Compressing man-page with gzip --no-name for
+                    reproducibility.
+                    Added support to run on macOS/OS X
+                    Added NT6.0 FAT32 boot record (Win7/8/10)
+                    Added NT6.0 EXFAT boot record (Win8/10)
+                    Updated partition information feature for EXFAT and
+                    NTFS and also enabled missing FAT16 support.
+                    Added X/Open7 POSIX.1-2008 definition to prevent
+                    compile warnings in identify.c and exfat.c source
+                    code caused by the fileno function.
+                    Removed support to alter OEM ID of NTFS boot records
+                    since this makes for an unmountable partition.
+                    Fixed error in Makefile where debug build didn't work.
+                    Changed Makefile to support install on Mac/BSD/Linux.
+                    Updated french, german and swedish man pages.
+                    Updated french, german and swedish po files.
+                    Improved partition device and start sector detection on
+                    FreeBSD. Implemented full support for OpenBSD by adding
+                    missing code for disk and partition information detection
+                    and enabled smart select which wasn't functional.
+
+
 17/3  2019 2.6.0    No changes, only marked as stable version.
 
 27/2  2016 2.5.3    Added french man page and translation.

@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH MS-SYS 1 "December 26, 2015"
+.TH MS-SYS 1 "April 17, 2020"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -28,8 +28,14 @@ A summary of options is included below.
 .B \-1, \-\-fat12
 Write a FAT12 floppy boot record to device.
 .TP
-.B \-2, \-\-fat32nt
-Write a FAT32 partition NT boot record to device.
+.B \-2, \-\-fat32nt5
+Write a FAT32 partition NT5.0 (NTLDR) boot record to device.
+.TP
+.B \-8, \-\-fat32nt6
+Write a FAT32 partition NT6.0 (BOOTMGR) boot record to device.
+.TP
+.B \-x, \-\-exfatnt6
+Write a EXFAT partition NT6.0 (BOOTMGR) boot record to device.
 .TP
 .B \-e, \-\-fat32pe
 Write a FAT32 partition PE boot record to device, for USB install and recovery.
@@ -152,6 +158,18 @@ Write automatically selected boot record to device.
 .P
 If ms-sys is started without any options a simple diagnosis will be done on
 the given device.
+.br
+.SH NOTES
+.P
+When writing EXFAT partition info the number of heads value is not used and the wipelabel
+feature is not supported either because these are not stored in the BIOS Parameter Block
+or anywhere in the boot sector. Their associated switches will be ignored if specified.
+.sp
+When writing NTFS partition info the physical drive id is not used and the wipelabel
+feature is not supported for the reasons stated above. The switches will be ignored.
+.sp
+The Write OEM ID feature is only supported on FAT12/16/32 filesystems and changing
+this value on NTFS or EXFAT volumes will result in an unmountable partition.
 .br
 .SH EXAMPLES
 .P

@@ -18,6 +18,10 @@
 #include <stdio.h>
 
 #include "file.h"
+#include "fat16.h"
+#include "fat32.h"
+#include "exfat.h"
+#include "ntfs.h"
 #include "identify.h"
 #include "partition_info.h"
 
@@ -36,22 +40,53 @@ int write_partition_number_of_heads(FILE *fp, int iHeads)
    return write_data(fp, 0x1a, aucBuf, 2);
 } /* write_partition_number_of_heads */
 
+#ifdef __OpenBSD__
+int write_partition_start_sector_number(FILE *fp, const char *szPath)
+#else
 int write_partition_start_sector_number(FILE *fp)
+#endif
 {
-   unsigned char aucBuf[4];
+#ifdef __OpenBSD__
+   unsigned long l = partition_start_sector(fp, szPath);
+#else
    unsigned long l = partition_start_sector(fp);
+#endif
 
    if(!l)
       return 0;
    /* Converting a number like this is not necessary as long as we are on
       i386 compatible CPUs, however, the following code might make the program
       more portable... */
-   aucBuf[0] = (unsigned char)(l & 0xff);
-   aucBuf[1] = (unsigned char)((l & 0xff00) >> 8);
-   aucBuf[2] = (unsigned char)((l & 0xff0000) >> 16);
-   aucBuf[3] = (unsigned char)((l & 0xff000000) >> 24);
-   return write_data(fp, 0x1c, aucBuf, 4);
+    if((is_fat_16_fs(fp)) || (is_fat_32_fs(fp)) || is_ntfs_fs(fp)) {
+        unsigned char aucBuf[4];
+        aucBuf[0] = (unsigned char)(l & 0xff);
+        aucBuf[1] = (unsigned char)((l & 0xff00) >> 8);
+        aucBuf[2] = (unsigned char)((l & 0xff0000) >> 16);
+        aucBuf[3] = (unsigned char)((l & 0xff000000) >> 24);
+        return write_data(fp, 0x1c, aucBuf, 4);
+    }
+    if(is_exfat_fs(fp)) {
+        unsigned char aucBuf[8];
+        aucBuf[0] = (unsigned char)(l & 0xff);
+        aucBuf[1] = (unsigned char)((l & 0xff00) >> 8);
+        aucBuf[2] = (unsigned char)((l & 0xff0000) >> 16);
+        aucBuf[3] = (unsigned char)((l & 0xff000000) >> 24);
+        aucBuf[4] = (unsigned char)((l & 0xff00000000) >> 32);
+        aucBuf[5] = (unsigned char)((l & 0xff0000000000) >> 40);
+        aucBuf[6] = (unsigned char)((l & 0xff000000000000) >> 48);
+        aucBuf[7] = (unsigned char)((l & 0xff00000000000000) >> 56);
+        return write_data(fp, 0x40, aucBuf, 8);
+    } else {
+        return 0;
+    }
 } /* write_partition_start_sector_number */
+
+int write_partition_physical_disk_drive_id_fat16(FILE *fp)
+{
+    unsigned char ucId = 0x80; /* C: */
+    
+    return write_data(fp, 0x24, &ucId, 1);
+} /* write_partition_physical_disk_drive_id_fat16 */
 
 int write_partition_physical_disk_drive_id_fat32(FILE *fp)
 {
@@ -60,12 +95,9 @@ int write_partition_physical_disk_drive_id_fat32(FILE *fp)
    return write_data(fp, 0x40, &ucId, 1);
 } /* write_partition_physical_disk_drive_id_fat32 */
 
-#if 0
-/* This code is not yet used */
-int write_partition_physical_disk_drive_id_fat16(FILE *fp)
+int write_partition_physical_disk_drive_id_exfat(FILE *fp)
 {
    unsigned char ucId = 0x80; /* C: */
    
-   return write_data(fp, 0x24, &ucId, 1);
-} /* write_partition_physical_disk_drive_id_fat16 */
-#endif
+   return write_data(fp, 0x6f, &ucId, 1);
+} /* write_partition_physical_disk_drive_id_exfat */

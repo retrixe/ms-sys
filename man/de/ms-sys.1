@@ -2,7 +2,7 @@
 .\" First parameter, NAME, should be all caps
 .\" Second parameter, SECTION, should be 1-8, maybe w/ subsection
 .\" other parameters are allowed: see man(7), man(1)
-.TH MS-SYS 1 "December 26, 2015"
+.TH MS-SYS 1 "April 17, 2020"
 .\" Please adjust this date whenever revising the manpage.
 .\"
 .\" Some roff macros, for reference:
@@ -28,8 +28,14 @@ Eine Zusammenfassung der Optionen ist unten aufgef\[:u]hrt.
 .B \-1, \-\-fat12
 Schreibt einen FAT12 Disketten Bootrecord aufs Ger\[:a]t.
 .TP
-.B \-2, \-\-fat32nt
-Schreibt einen FAT32 Partition NT Bootrecord aufs Ger\[:a]t.
+.B \-2, \-\-fat32nt5
+Schreibt einen FAT32 Partition NT5.0 (NTLDR) Bootrecord aufs Ger\[:a]t.
+.TP
+.B \-8, \-\-fat32nt6
+Schreibt einen FAT32 Partition NT6.0 (BOOTMGR) Bootrecord aufs Ger\[:a]t.
+.TP
+.B \-x, \-\-exfatnt6
+Schreibt einen EXFAT Partition NT6.0 (BOOTMGR) Bootrecord aufs Ger\[:a]t.
 .TP
 .B \-e, \-\-fat32pe
 Schreibt einen FAT32 Partition PE Bootrecord aufs Ger\[:a]t, 
@@ -156,6 +162,21 @@ Schreibt automatisch gew\[:a]hlten Bootrecord aufs Ger\[:a]t.
 .P
 ms-sys ohne Optionen wird eine einfache Diagnose an 
 dem angegebenen Ger\[:a]t durchf\[:u]hren.
+.br
+.SH "NOTIZEN"
+.P
+Beim Schreiben von EXFAT-Partitionsinformationen wird die Anzahl der K\[:o]pfe nicht verwendet
+und die Wipelabel-Funktion wird auch nicht unterst\[:u]tzt weil diese nicht in der gespeichert
+sind BIOS-Parameterblock oder irgendwo im Bootsektor. Die zugeh\[:o]rigen Schalter werden bei
+Angabe ignoriert.
+.sp
+Beim Schreiben von NTFS-Partitionsinformationen die ID des physischen Laufwerks wird nicht
+verwende und das Wischetikett Funktion wird nicht unterst\[:u]tzt aus den oben genannten Gr\[:u]nden.
+Die Schalter werden ignoriert.
+.sp
+Die Funktion zum Schreiben von OEM ID wird nur f\[:u]r unterst\[:u]tzt FAT12/16/32 Dateisysteme
+und dies zu \[:a]ndern Wert auf NTFS- oder EXFAT-Volumes f\[:u]hrt zu einer nicht bereitstellbaren
+Partition.
 .br
 .SH "BEISPIELE"
 .P
