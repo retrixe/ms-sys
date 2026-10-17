@@ -93,8 +93,11 @@ int main(int argc, char **argv)
       iBr = smart_select(fp);
 #endif
       if(!iBr)
+      {
 	 printf(_("Unable to automaticly select boot record for %s\n"),
 		argv[argc-1]);
+	 iRet = 1;
+      }
    }
    if(iBr && !bForce)
    {
