@@ -15,10 +15,15 @@
     along with this program; if not, write to the Free Software
     Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 ******************************************************************/
+#define _XOPEN_SOURCE 700 /* X/Open7 POSIX.1-2008 for fileno() and fsync() */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
+#ifdef __APPLE__
+#include <fcntl.h>
+#endif
 
 #include "fat12.h"
 #include "fat16.h"
@@ -56,6 +61,7 @@ int main(int argc, char **argv)
    int bWriteWindowsDiskSignature = 0;
    uint32_t tWindowsDiskSignature = 0x0;
    int iRet = 0;
+   int bWrite = 0;
 
    nls_init();
    if(parse_switches(argc, argv, &iBr, &bForce, &bPrintVersion,
@@ -72,9 +78,8 @@ int main(int argc, char **argv)
       if(argc < 3)
 	 return 0;
    }
-   fp=fopen(argv[argc-1],
-	    (iBr || bWritePartitionInfo || szOemId || bWriteWindowsDiskSignature) ?
-	    "r+b" : "rb");
+   bWrite = (iBr || bWritePartitionInfo || szOemId || bWriteWindowsDiskSignature);
+   fp=fopen(argv[argc-1], bWrite ? "r+b" : "rb");
    if(!fp)
    {
       printf(_("Unable to open %s, %s\n"), argv[argc-1], strerror(errno));
@@ -600,6 +605,26 @@ int main(int argc, char **argv)
 		   argv[argc-1]);
 	    iRet = 1;
 	 }	    
+   }
+   /* Make sure boot record writes reach the device before we report success:
+      fflush() hands stdio's buffer to the kernel, fsync() forces it (and the
+      device's write cache) to the medium. Without this, writes sit in the page
+      cache and are lost if the device is removed right away. */
+   if(bWrite && !iRet)
+   {
+      if(fflush(fp) ||
+#ifdef __APPLE__
+	 /* fsync() does not flush the drive cache on macOS, F_FULLFSYNC does */
+	 fcntl(fileno(fp), F_FULLFSYNC) == -1
+#else
+	 fsync(fileno(fp))
+#endif
+	 )
+      {
+	 printf(_("Failed syncing writes to %s, %s\n"), argv[argc-1],
+		strerror(errno));
+	 iRet = 1;
+      }
    }
    fclose(fp);
    return iRet;
